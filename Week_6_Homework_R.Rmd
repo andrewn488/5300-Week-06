@@ -1,0 +1,113 @@
+---
+title: "Week 6 Homework R Question ANSWERS"
+author: "ANDREW NALUNDASAN"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+
+In the following code chunk, load all the libraries you will need:
+
+```{r}
+library(tidyverse)
+library(vtable)
+library(car)
+library(jtools)
+library(estimatr)
+library(wooldridge)
+```
+
+## Tasks:
+
+a. Consider the three data sets being constructed in the next code chunk
+
+```{r}
+tib1 <- tibble(individual = sort(rep(1:10, 10)),
+               time = rep(1:10, 10)) %>%
+  mutate(X = individual + time + rnorm(100)) %>%
+  mutate(Y = X + individual + time + rnorm(100))
+tib2 <- tibble(individual = sort(rep(1:10, 10)),
+               time = rep(1:10, 10)) %>%
+  mutate(X = individual + rnorm(100)) %>%
+  mutate(Y = X + individual + time + rnorm(100))
+tib3 <- tibble(individual = sort(rep(1:10, 10)),
+               time = rep(1:10, 10)) %>%
+  mutate(X = rnorm(100)) %>%
+  mutate(Y = X + individual + time + rnorm(100))
+```
+
+In which of those three data sets will fixed effects for `individual` be necessary *and* sufficient to identify the causal effect of `X` on `Y`? Explain why. (note: "I tried all three and fixed effects seemed to work best for this one" might give you a hint as to the answer but it's not a good explanation of why)
+
+ANSWER HERE: Tibble 1 would be the best one since the means of both X and Y are taking into account time. Tibble 2 and Tibble 3 don't account for time in their X variables. Panel data is needed for Fixed Effects, and Tibble 1 gives that to us. 
+
+b. Use `mutate()` from **dplyr**/**tidyverse** and `factor()` to convert `individual` into a factor variable (i.e. so that R knows it's categorical) and save the resulting data set as `my_df`.
+
+```{r}
+my_df <- tib1 %>% mutate(category = factor(individual))
+```
+
+c. Use `group_by()` and `mutate()` from **dplyr**/**tidyverse** to create the new variables `X_mean`, `Y_mean`, `X_within`, and `Y_within`, representing the by-individual means and the within variation for `X` and `Y`, respectively. Overwrite `my_df` with this.
+
+```{r}
+my_df <- my_df %>% 
+  group_by(individual) %>% 
+  mutate(X_mean = mean(X),
+         Y_mean = mean(Y)) %>%
+  mutate(X_within = (X - X_mean),
+         Y_within = (Y - Y_mean))
+```
+
+d. To see how the *variation is partitioned* into "within" and "between" forms, calculate (1) the variance of `X`, (2) the variance of `X_mean`, (3) the variance of `X_within`, and (4) the sum of the variance of `X_mean` and the variance of `X_within`.
+
+```{r}
+var_x <- var(my_df$X)
+var_x_mean <- var(my_df$X_mean)
+var_x_within <- var(my_df$X_within)
+sum_var <- sum(var_x_mean, var_x_within)
+```
+
+e. Using the variables you've already created, perform an `individual`-fixed effects regression of `Y` on `X` using the de-meaning method and store the result as `fe_demean`
+
+```{r}
+fe_demean <- lm(Y ~ X + individual, data = my_df)
+export_summs(fe_demean)
+# figure out if should use X_within and Y_within, and if 'individual' should be included
+```
+
+f. Perform an `individual`-fixed effects regression of `Y` on `X` using the least-squares dummy variable method and store the result as `fe_lsdv`.
+
+```{r}
+fe_lsdv <- lm(Y ~ X + factor(individual), data = my_df)
+```
+
+g. Perform an `individual`-fixed effects regression of `Y` on `X` using `lm_robust()` from **estimatr** and store the result as `fe_robust`.
+
+```{r}
+fe_robust <- lm_robust(Y ~ X, fixed_effects = ~individual, data = my_df)
+```
+
+h. Use `export_summs` to look at all three models, using the `coefs` argument to leave out all of the dummy variable coefficients in `fe_lsdv`.
+
+```{r}
+export_summs(fe_demean, fe_lsdv, fe_robust, digits = 3, coefs = c('individual', 'X'))
+```
+
+i. Explain why the R squared is so much lower in Model 1 than in Model 2.
+
+ANSWER HERE: Model 1 R^2 is looking at the Within Variation, leaving the Fixed Effects out of the model. Model 2 uses the Fixed Effects in its model. The two are both correct, they're just measuring two different things. 
+
+j. Use `linearHypothesis` and `matchCoefs()` from **car** to test whether all the dummy coefficients in `fe_lsdv` are jointly zero.
+
+```{r}
+linearHypothesis(fe_lsdv, matchCoefs(fe_lsdv, 'individual'))
+
+```
+
+h. Can you reject the null that they're all jointly zero at the 5% significance level?
+
+ANSWER HERE: No
